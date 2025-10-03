@@ -1,3 +1,4 @@
+import pdb
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -7,6 +8,7 @@ import pytest
 
 from models.linear_model import LinearModel
 from models.logistic_regression import LogisticRegression, MiniBatchLogisticRegression
+from models.model_stats import DataStats, ScalingE
 
 
 class Classifier(ABC):
@@ -96,9 +98,20 @@ class LogRegressionClassifier(Classifier):
         return len( d[d == 1] )
 
 @pytest.fixture
-def emails_dataset():
+def emails_dataset_input_features():
+    # return ['the', 'ect']
+    return ['the', 'to', 'ect', 'and', 'for', 'of']
+
+@pytest.fixture
+def emails_dataset(emails_dataset_input_features):
+    # pdb.set_trace()
     emails_dataset = pd.read_csv("./data/emails.csv")
-    yield emails_dataset
+    ds = DataStats(emails_dataset, label_cols=["Prediction"])
+    # add second-order features
+    # extended_features = list(emails_dataset_input_features)
+    extended_features = ds.poly(emails_dataset_input_features, 2)
+    # extended_features = ds.corr(emails_dataset_input_features)
+    yield ds.split("Prediction"), extended_features
 
 @pytest.fixture
 def rice_dataset():
@@ -162,17 +175,32 @@ def rice_dataset():
     return train_features, train_labels, validation_features, validation_labels, test_features, test_labels
 
 def test_emails_dataset(emails_dataset):
-    lr = LogisticRegression(epochs=60, num_features=6, learning_rate=0.001, error=1e-10, max_num_iterations=1000)
+    # pdb.set_trace()
+    split, extended_features = emails_dataset
+    train_features, train_labels, validation_features, validation_labels, test_features, test_labels = split
+    lr = LogisticRegression(epochs=50, num_features=len(extended_features), learning_rate=0.001, error=1e-15, max_num_iterations=5000)
     lrc = LogRegressionClassifier(lr, 0.35)
-    input_features = ['the', 'to', 'ect', 'and', 'for', 'of']
-    lrc.train(emails_dataset[input_features], emails_dataset['Prediction'], 0.001)
-    pred = lr.pred(emails_dataset[input_features])
-    y = emails_dataset['Prediction']
+    # input_features = ['the', 'to', 'ect', 'and', 'for', 'of']
+
+    lrc.train(train_features[extended_features], train_labels, 0.001)
+    pred = lr.pred(validation_features[extended_features])
+    y = validation_labels
     accuracy = lrc.accuracy(y, pred)
     recall = lrc.recall(y, pred)
     precision = lrc.precision(y, pred)
     f1 = lrc.f1(y, pred)
-    print("linear model prediction accuracy: %s, recall: %s, precision: %s, f1: %s" % (accuracy, recall, precision, f1))
+    print("logistic regression model (validation) prediction accuracy: %s, recall: %s, precision: %s, f1: %s" % (accuracy, recall, precision, f1))
+    pred = lr.pred(test_features[extended_features])
+    y = test_labels
+    accuracy = lrc.accuracy(y, pred)
+    recall = lrc.recall(y, pred)
+    precision = lrc.precision(y, pred)
+    f1 = lrc.f1(y, pred)
+    print(
+        "logistic regression model (test) prediction accuracy: %s, recall: %s, precision: %s, f1: %s" % (accuracy,
+                                                                                                               recall,
+                                                                                                               precision,
+                                                                                                               f1))
 
 def test_rice_dataset(rice_dataset):
     train_features, train_labels, validation_features, validation_labels, test_features, test_labels = rice_dataset

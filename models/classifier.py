@@ -9,6 +9,7 @@ import pytest
 from models.linear_model import LinearModel
 from models.logistic_regression import LogisticRegression, MiniBatchLogisticRegression
 from models.model_stats import DataStats, ScalingE
+from models.nodes import NeuralNetwork
 
 
 class Classifier(ABC):
@@ -55,7 +56,7 @@ class Classifier(ABC):
 
 class LogRegressionClassifier(Classifier):
 
-    def __init__(self, model: LinearModel, threshold: float):
+    def __init__(self, model: LinearModel | LogisticRegression | NeuralNetwork, threshold: float):
         self._model = model
         self._threshold = threshold
 
@@ -108,9 +109,10 @@ def emails_dataset(emails_dataset_input_features):
     emails_dataset = pd.read_csv("./data/emails.csv")
     ds = DataStats(emails_dataset, label_cols=["Prediction"])
     # add second-order features
-    # extended_features = list(emails_dataset_input_features)
-    extended_features = ds.poly(emails_dataset_input_features, 2)
+    extended_features = list(emails_dataset_input_features)
+    # extended_features = ds.poly(emails_dataset_input_features, 2)
     # extended_features = ds.corr(emails_dataset_input_features)
+    # extended_features = ds.cross(emails_dataset_input_features)
     yield ds.split("Prediction"), extended_features
 
 @pytest.fixture

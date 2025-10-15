@@ -5,26 +5,34 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from models.linear_model import LinearModel, LossE, RegE, MiniBatchModel
+from models.linear_model import LinearModel, MiniBatchModel
+from models.nodes import NodesE
+from models.optimization import OptimizersE
+from models.regularization import RegE
+from models.loss import LossE
 
 
 class LogisticRegression(LinearModel):
     """
     """
 
-    def __init__(self, epochs: int, num_features: int, learning_rate: float = 0.001, error: float = 1e-5,
+    def __init__(self, epochs: int, num_features: int, node_key: NodesE = NodesE.ACTIV_NODE, opt_key: OptimizersE = OptimizersE.GDSC,
+                 learning_rate: float = 0.001, error: float = 1e-5,
                  max_num_iterations: int = 1000, loss_key: LossE = LossE.LOG_LOSS, reg_key: RegE = RegE.L2):
 
-        super().__init__(epochs, num_features, learning_rate, error, max_num_iterations, loss_key, reg_key)
+        super().__init__(epochs, num_features, node_key, opt_key, learning_rate, error, max_num_iterations, loss_key, reg_key)
 
 
 class MiniBatchLogisticRegression(MiniBatchModel):
     """
 
     """
-    def __init__(self, batch: int, epochs: int, num_features: int, learning_rate: float = 0.001, error: float = 1e-5,
+
+    def __init__(self, batch: int, epochs: int, num_features: int, node_key: NodesE = NodesE.ACTIV_NODE, opt_key: OptimizersE = OptimizersE.MBGDSC,
+                 learning_rate: float = 0.001, error: float = 1e-5,
                  max_num_iterations: int = 1000, loss_key: LossE = LossE.LOG_LOSS, reg_key: RegE = RegE.L2):
-        super().__init__(batch, epochs, num_features, learning_rate, error, max_num_iterations, loss_key, reg_key)
+        super().__init__(batch, epochs, num_features, node_key, opt_key, learning_rate, error, max_num_iterations, loss_key, reg_key)
+
 
 @pytest.fixture
 def emails_dataset():
@@ -32,7 +40,7 @@ def emails_dataset():
     yield emails_dataset
 
 def test_logistic_regression(emails_dataset):
-    lr = LogisticRegression(epochs=5, num_features=6, learning_rate=0.001)
+    lr = LogisticRegression(epochs=10, num_features=6, learning_rate=0.001)
     print(lr.train(emails_dataset[['the', 'to', 'ect', 'and', 'for', 'of']], emails_dataset['Prediction'], 0.001))
     pred = lr.pred(emails_dataset[['the', 'to', 'ect', 'and', 'for', 'of']])
     y = emails_dataset['Prediction']

@@ -116,7 +116,14 @@ class DataStats:
                 extended_cols.append(col_corr)
         return extended_cols
 
-
+    def cross(self, cols: list[str]):
+        extended_cols = list(cols)
+        for i in range(len(cols)):
+            for j in range(i+1, len(cols)):
+                col_cross = f"{cols[i]}x{cols[j]}"
+                self.normalized_df[col_cross] = self.normalized_df[cols[i]] * self.normalized_df[cols[j]]
+                extended_cols.append(col_cross)
+        return extended_cols
 
     def split(self, label: str, q1: float = 0.8, q2: float = 0.1):
         index_80th = round(self.number_samples * q1)

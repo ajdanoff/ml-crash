@@ -1,60 +1,155 @@
+import itertools
+import pdb
 import re
+from collections import defaultdict
+from typing import Any
 
+import numpy as np
+import pandas as pd
 import pytest
 
 import string
+import nltk
+from nltk.stem import SnowballStemmer
+from nltk.tokenize import word_tokenize
+from nltk.corpus import stopwords
+
+class Token:
+
+    def __init__(self, code: int, freq: int = 0):
+        self.code = code
+        self.freq = freq
 
 class Vectorizer:
     """
 
     """
-    def __init__(self):
-        self.vocabulary = {"": 0, "[UNK]": 1}
+    def __init__(self, max_voc_size: int = 20000, language:str = "english"):
+        self.vocabulary = {"": Token(0), "[UNK]": Token(1)}
+        self.max_voc_size = max_voc_size
+        self.stemmer = SnowballStemmer(language)
+        self.language = language
+        self.stop_words = set(stopwords.words(self.language))
 
     def standardize(self, text):
         text = text.lower()
         return "".join(char for char in text if char not in string.punctuation)
 
     def tokenize(self, text: str):
-        return re.findall(r'\b\w+\b', text)
+        return word_tokenize(text, self.language)
 
-    def make_vocabulary(self, dataset):
+    def make_vocabulary(self, dataset, stemming: bool = False ):
+        t = 0
         for text in dataset:
             text = self.standardize(text)
             tokens = self.tokenize(text)
             for token in tokens:
-                if token not in self.vocabulary:
-                    self.vocabulary[token] = len(self.vocabulary)
-        self.inverse_vocabulary = dict((v, k) for k, v in self.vocabulary.items())
+                if stemming:
+                    token = self.stemmer.stem(token)
+                if token not in self.stop_words:
+                    if token not in self.vocabulary:
+                        self.vocabulary[token] = Token(t)
+                        t += 1
+                    else:
+                        self.vocabulary[token].freq += 1
+            if len(self.vocabulary) > self.max_voc_size:
+                self.trunc_vocab()
+        self.inverse_vocabulary = dict((v.code, k) for k, v in self.vocabulary.items())
+
+    def trunc_vocab(self):
+        sorted_dict = dict(sorted(self.vocabulary.items(), key=lambda item: item[1].freq, reverse=True))
+        trunc_sorted_dict = dict(itertools.islice(sorted_dict.items(), 0, self.max_voc_size))
+        keys = list(trunc_sorted_dict.keys())
+        self.vocabulary = {"": Token(0), "[UNK]": Token(1)}
+        self.vocabulary.update(dict((keys[i], Token(i+2)) for i in range(len(keys))))
+        print("vocabulary truncated: %s" %dict(itertools.islice(self.vocabulary.items(), 0, 10)))
 
     def encode(self, text):
         text = self.standardize(text)
         tokens = self.tokenize(text)
-        return [self.vocabulary.get(token, 1) for token in tokens]
+        return [self.vocabulary.get(token, self.vocabulary["[UNK]"]).code for token in tokens]
+
+    def multi_hot_encode(self, codes: Any):
+        vec = np.zeros(len(self.vocabulary) + 2)
+        for code in codes:
+            vec[code] = 1
+        return vec
+
+    def multi_hot_decode(self, mlh_codes: Any):
+        codes = [i for i in range(len(mlh_codes)) if mlh_codes[i] == 1]
+        return codes
 
     def decode(self, int_sequence):
         return " ".join(
             self.inverse_vocabulary.get(i, "[UNK]") for i in int_sequence
         )
 
+    def print_vocabulary(self):
+        for k, v in self.vocabulary.items():
+            print("%s: %s" %(k, v))
+
 dataset = [
-    "I write, erase, rewrite",
-    "Erase again, and then",
-    "A poppy blooms.",
-    "On sweet plum blossoms",
-    "The sun rises suddenly.",
-    "Look, a mountain path I"
+    """
+    “Many Karate teachers teach a watered down style – no hip action and no depth of punching – so it is easy to say that these teachers have no depth to their knowledge.
+     You are what your teacher is, and if he knows a lot, you should be able to demonstrate this knowledge.”
+    """,
+    """
+    “Karate has no philosophy. 
+    Some people think that the tradition of Karate came from Buddhism and Karate has a connection with the absolute, space and universe, but I don’t believe in that.
+    My philosophy is to knock my opponent out, due to the use of only one technique. One finishing blow!”
+    """,
+    """
+    “In the past, it was expected that about three years were required to learn a single kata, and usually even an expert of considerable skill would only know three,
+     or at most five, kata.” 
+    """,
+    """
+    “To all those whose progress remains hampered by ego-related distractions, 
+    let humility – the spiritual cornerstone upon which Karate rests – serve to remind one to place virtue before vice, values before vanity and principles before personalities.” 
+    """,
+    """
+    “Once a kata has been learned, it must be practiced repeatedly until it can be applied in an emergency, for knowledge of just the sequence of a form in Karate is useless.”
+    """
 ]
 
 @pytest.mark.parametrize("s", [dataset])
 def test_tokenization(s):
     vectorizer = Vectorizer()
-    vectorizer.make_vocabulary(dataset)
-    test_sentence = "I write, rewrite, and still rewrite again"
+    vectorizer.make_vocabulary(dataset, stemming=True)
+    vectorizer.print_vocabulary()
+    test_sentence = "I demonstrate a kata."
     encoded_sentence = vectorizer.encode(test_sentence)
     print(encoded_sentence)
-    decoded_sentence = vectorizer.decode(encoded_sentence)
+    mlh_encoded = vectorizer.multi_hot_encode(encoded_sentence)
+    print(mlh_encoded)
+    mlh_decoded = vectorizer.multi_hot_decode(mlh_encoded)
+    print(mlh_decoded)
+    decoded_sentence = vectorizer.decode(mlh_decoded)
     print(decoded_sentence)
+
+@pytest.fixture
+def fine_tuning():
+    pdb.set_trace()
+    train = pd.read_csv("./data/llm_class_fine_tuning/train.csv").sample(n=1000)
+    # train['model_a'] = train['model_a'].apply()
+    test = pd.read_csv("./data/llm_class_fine_tuning/test.csv")
+    train, _ = apply_vectorization(train, ['model_a', 'model_b'])
+    train, vec = apply_vectorization(train, ['prompt', 'response_a', 'response_b'], stemming=True)
+    test = apply_vectorization(test, ['prompt', 'response_a', 'response_b'], vec, stemming=True)
+    yield train, test
+
+def apply_vectorization(data_set, cols, vectorizer: Vectorizer | None = None, stemming: bool = False):
+    if vectorizer is None:
+        vectorizer = Vectorizer()
+    for col in cols:
+        vectorizer.make_vocabulary(data_set[col], stemming)
+        col_enc = data_set[col].apply(vectorizer.encode)
+        data_set[col] = col_enc.apply(vectorizer.multi_hot_encode)
+    return data_set, vectorizer
+
+def test_tokenization_fine_tuning(fine_tuning):
+    train, test = fine_tuning
+    pdb.set_trace()
+    print(train)
 
 from tensorflow.keras.layers import TextVectorization
 text_vectorization = TextVectorization(
